@@ -27,8 +27,9 @@ authenticator = stauth.Authenticate(
 )
 
 # --- Login ---
+# --- Login ---
 authenticator.login(location="main")
-status = authenticator.authentication_status
+status = authenticator.status
 nome = authenticator.username
 
 if status is False:
