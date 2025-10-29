@@ -1,13 +1,11 @@
 # ============================================================
-# ✅ Controle de Tarefas – UX + Edição por Tabela (AgGrid)
+# ✅ Controle de Tarefas – versão compatível (sem AgGrid)
 # ============================================================
 
 import streamlit as st
 import pandas as pd
 import bcrypt
 from datetime import datetime
-
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 
 from models.tarefa import Tarefa
 from models.dashboard import Dashboard
@@ -23,7 +21,7 @@ st.markdown("<h1 style='text-align:center;'>🗂️ Controle de Tarefas</h1>", u
 
 
 # ============================================================
-# 🔐 AUTENTICAÇÃO MANUAL (usando bcrypt)
+# 🔐 AUTENTICAÇÃO MANUAL (bcrypt)
 # ============================================================
 creds = st.secrets["credentials"]["usernames"]
 if "user" not in st.session_state:
@@ -48,7 +46,6 @@ if st.session_state["user"] is None:
             st.error("❌ Usuário não encontrado.")
     st.stop()
 
-# --- Sessão logada ---
 nome = st.session_state["user"]
 st.sidebar.success(f"Bem-vindo(a), {nome}! 👋")
 if st.sidebar.button("Sair"):
@@ -65,11 +62,11 @@ def get_service():
     return GoogleSheetsService(sheet_id)
 
 sheets_service = get_service()
-sheet = sheets_service.sheet  # gspread worksheet
+sheet = sheets_service.sheet
 
 
 # ============================================================
-# 🔧 HELPERS – Google Sheets
+# 🔧 UTILITÁRIOS
 # ============================================================
 @st.cache_data(ttl=60)
 def get_headers():
@@ -84,7 +81,6 @@ def ensure_column(df: pd.DataFrame, col: str, fill=""):
     return df
 
 def id_to_row_map():
-    """Mapeia id -> número da linha na planilha (para updates rápidos)."""
     values = sheet.get_all_values()
     if not values:
         return {}
@@ -100,11 +96,9 @@ def id_to_row_map():
     return mapping
 
 def update_row_fields(row_num: int, updates: dict):
-    """Atualiza campos específicos (coluna por coluna) conforme o cabeçalho."""
     headers = get_headers()
     if not headers or not row_num:
         return False
-    cells = []
     for k, v in updates.items():
         if k in headers:
             col_idx = headers.index(k) + 1
@@ -112,42 +106,29 @@ def update_row_fields(row_num: int, updates: dict):
     return True
 
 def append_row_with_optional_description(tarefa: Tarefa, autor: str, descricao: str):
-    """
-    Mantém compatibilidade: usa to_list() + [autor] e,
-    se existir coluna 'descricao', atualiza a célula após o append.
-    """
     headers = get_headers()
-    # 1) Append base
     nova_linha = tarefa.to_list() + [autor]
     sheet.append_row(nova_linha)
-    # 2) Se houver 'descricao', achar a linha da tarefa e atualizar
     if "descricao" in headers and descricao:
-        # encontra linha pelo id
         row_map = id_to_row_map()
         row_num = row_map.get(tarefa.id)
         if row_num:
             col_idx = headers.index("descricao") + 1
             sheet.update_cell(row_num, col_idx, descricao)
 
-
-# ============================================================
-# 🧠 FUNÇÕES AUXILIARES (UI)
-# ============================================================
 def cor_status(status):
-    if status == "Concluída":
-        return "#90EE90"  # verde
-    elif status == "Em andamento":
-        return "#FFD700"  # amarelo
-    return "#F08080"      # vermelho
+    if status == "Concluída": return "#90EE90"
+    elif status == "Em andamento": return "#FFD700"
+    return "#F08080"
 
 
 # ============================================================
 # 🎨 INTERFACE PRINCIPAL
 # ============================================================
-aba = st.sidebar.radio("📍 Navegação", ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar via Tabela"])
+aba = st.sidebar.radio("📍 Navegação", ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar Tarefa"])
 
 # ------------------------------------------------------------
-# ➕ NOVA TAREFA (com DESCRIÇÃO multilinha)
+# ➕ NOVA TAREFA
 # ------------------------------------------------------------
 if aba == "Nova Tarefa":
     InterfaceUI.header("➕ Adicionar Nova Tarefa")
@@ -166,7 +147,7 @@ if aba == "Nova Tarefa":
 
 
 # ------------------------------------------------------------
-# 📋 MINHAS TAREFAS (cards)
+# 📋 MINHAS TAREFAS
 # ------------------------------------------------------------
 elif aba == "Minhas Tarefas":
     InterfaceUI.header("📋 Suas Tarefas")
@@ -177,21 +158,19 @@ elif aba == "Minhas Tarefas":
     if df.empty:
         st.info("Nenhuma tarefa cadastrada ainda.")
     else:
-        df = df[df["autor"] == nome] if "autor" in df.columns else df
+        df = df[df["autor"] == nome]
 
-        # Filtros
         col1, col2 = st.columns(2)
         with col1:
-            filtro_categoria = st.multiselect("Filtrar por categoria", sorted(df["categoria"].dropna().unique().tolist()))
+            filtro_categoria = st.multiselect("Filtrar por categoria", sorted(df["categoria"].unique().tolist()))
         with col2:
-            filtro_status = st.multiselect("Filtrar por status", sorted(df["status"].dropna().unique().tolist()))
+            filtro_status = st.multiselect("Filtrar por status", sorted(df["status"].unique().tolist()))
 
         if filtro_categoria:
             df = df[df["categoria"].isin(filtro_categoria)]
         if filtro_status:
             df = df[df["status"].isin(filtro_status)]
 
-        # Cards
         for _, row in df.iterrows():
             cor = cor_status(row.get("status", "Pendente"))
             InterfaceUI.styled_card(
@@ -208,7 +187,7 @@ elif aba == "Minhas Tarefas":
 
 
 # ------------------------------------------------------------
-# 📊 DASHBOARD ANALYTICS
+# 📊 ANALYTICS
 # ------------------------------------------------------------
 elif aba == "Analytics":
     InterfaceUI.header("📊 Dashboard de Tarefas")
@@ -218,7 +197,7 @@ elif aba == "Analytics":
     if df.empty:
         st.info("Nenhum dado disponível ainda.")
     else:
-        df = df[df["autor"] == nome] if "autor" in df.columns else df
+        df = df[df["autor"] == nome]
         dashboard = Dashboard(df)
         dashboard.kpi_cards()
         dashboard.grafico_status()
@@ -226,125 +205,49 @@ elif aba == "Analytics":
 
 
 # ------------------------------------------------------------
-# ✍️ ATUALIZAR VIA TABELA (seleciona linha e clica salvar)
+# ✍️ ATUALIZAR TAREFA
 # ------------------------------------------------------------
-elif aba == "Atualizar via Tabela":
-    InterfaceUI.header("✍️ Atualizar Tarefas em Tabela")
+elif aba == "Atualizar Tarefa":
+    InterfaceUI.header("✍️ Atualizar Tarefas")
     df = sheets_service.carregar_tarefas()
     df = ensure_column(df, "autor", "")
     df = ensure_column(df, "descricao", "")
 
-    if df.empty:
+    if df.empty or "autor" not in df.columns:
         st.info("Nenhuma tarefa cadastrada ainda.")
         st.stop()
 
-    # Filtra por autor logado, se existir coluna
-    if "autor" in df.columns:
-        df = df[df["autor"] == nome].copy()
-
-    if df.empty:
+    df_user = df[df["autor"] == nome]
+    if df_user.empty:
         st.info("Você ainda não possui tarefas.")
         st.stop()
 
-    # Ajustes de tipos
-    # Mantemos 'prazo' como string (dd/mm/aaaa). Se vier como datetime, converte.
-    if "prazo" in df.columns:
-        def _fmt_date(x):
-            if pd.isna(x):
-                return ""
-            if isinstance(x, str):
-                return x
-            try:
-                return pd.to_datetime(x).strftime("%d/%m/%Y")
-            except Exception:
-                return str(x)
-        df["prazo"] = df["prazo"].apply(_fmt_date)
+    st.dataframe(df_user[["id", "titulo", "categoria", "prazo", "status", "descricao"]], use_container_width=True)
+    tarefa_id = st.selectbox("Selecione a tarefa a editar:", df_user["id"].tolist())
 
-    # Constrói grid editável
-    gb = GridOptionsBuilder.from_dataframe(df)
-    # Editáveis
-    editable_cols = ["titulo", "categoria", "prazo", "status", "descricao"]
-    for c in editable_cols:
-        if c in df.columns:
-            gb.configure_column(c, editable=True, wrapText=True, autoHeight=True)
+    tarefa = df_user[df_user["id"] == tarefa_id].iloc[0]
+    novo_titulo = st.text_input("Título", value=tarefa["titulo"])
+    nova_categoria = st.selectbox("Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"], index=["Pessoal","Trabalho","Estudo","Outro"].index(tarefa["categoria"]) if tarefa["categoria"] in ["Pessoal","Trabalho","Estudo","Outro"] else 0)
+    novo_prazo = st.date_input("Prazo", value=pd.to_datetime(tarefa["prazo"], dayfirst=True))
+    novo_status = st.selectbox("Status", ["Pendente", "Em andamento", "Concluída"], index=["Pendente", "Em andamento", "Concluída"].index(tarefa["status"]) if tarefa["status"] in ["Pendente", "Em andamento", "Concluída"] else 0)
+    nova_desc = st.text_area("Descrição", value=tarefa.get("descricao", ""), height=150)
 
-    # Selectbox para status com domínios
-    if "status" in df.columns:
-        gb.configure_column(
-            "status",
-            cellEditor="agSelectCellEditor",
-            cellEditorParams={"values": ["Pendente", "Em andamento", "Concluída"]}
-        )
-
-    # Seleção de única linha
-    gb.configure_selection(selection_mode="single", use_checkbox=True)
-    gb.configure_grid_options(domLayout="normal")
-
-    grid_options = gb.build()
-    grid_resp = AgGrid(
-        df,
-        gridOptions=grid_options,
-        height=420,
-        data_return_mode=DataReturnMode.AS_INPUT,
-        update_mode=GridUpdateMode.MODEL_CHANGED | GridUpdateMode.SELECTION_CHANGED,
-        fit_columns_on_grid_load=True,
-        enable_enterprise_modules=False
-    )
-
-    df_editado = pd.DataFrame(grid_resp["data"])
-    selecionadas = grid_resp["selected_rows"]
-
-    st.markdown("---")
-    colA, colB = st.columns([1,1])
-
-    with colA:
-        st.info("Selecione uma linha, edite as colunas desejadas e clique em **Salvar alterações**.")
-
-    with colB:
-        salvar = st.button("💾 Salvar alterações", type="primary")
-
-    if salvar:
+    if st.button("💾 Salvar alterações"):
         try:
-            headers = get_headers()
-            if "id" not in df_editado.columns or "id" not in headers:
-                st.error("A coluna 'id' é necessária para atualizar a planilha.")
-                st.stop()
-
-            # Mapa id -> linha
+            updates = {
+                "titulo": novo_titulo,
+                "categoria": nova_categoria,
+                "prazo": novo_prazo.strftime("%d/%m/%Y"),
+                "status": novo_status,
+                "descricao": nova_desc
+            }
             row_map = id_to_row_map()
-            if not row_map:
-                st.error("Não foi possível localizar as linhas na planilha pelo 'id'.")
-                st.stop()
-
-            # Detecta diferenças (linha a linha)
-            # Compara df_editado com df (original mostrado antes do AgGrid)
-            original = df.reset_index(drop=True)
-            editado = df_editado.reset_index(drop=True)
-
-            changes = []  # lista de dicts: {row_num, updates{col:val}}
-            for i in range(len(editado)):
-                row_o = original.iloc[i]
-                row_n = editado.iloc[i]
-                diffs = {}
-                for c in editable_cols:
-                    if c in editado.columns:
-                        vo = str(row_o.get(c, "") if row_o.get(c, "") is not None else "")
-                        vn = str(row_n.get(c, "") if row_n.get(c, "") is not None else "")
-                        if vo != vn:
-                            diffs[c] = vn
-                if diffs:
-                    tarefa_id = str(row_n["id"])
-                    row_num = row_map.get(tarefa_id)
-                    if row_num:
-                        changes.append({"row_num": row_num, "updates": diffs})
-
-            if not changes:
-                st.info("Nenhuma alteração para salvar.")
-            else:
-                for ch in changes:
-                    update_row_fields(ch["row_num"], ch["updates"])
-                st.success(f"Alterações salvas com sucesso ✅ ({len(changes)} linha(s) atualizada(s))")
+            row_num = row_map.get(tarefa_id)
+            if row_num:
+                update_row_fields(row_num, updates)
+                st.success("✅ Tarefa atualizada com sucesso!")
                 st.rerun()
-
+            else:
+                st.error("Tarefa não encontrada na planilha.")
         except Exception as e:
-            st.error(f"Falha ao salvar alterações: {e}")
+            st.error(f"Erro ao atualizar tarefa: {e}")
