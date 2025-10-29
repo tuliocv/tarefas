@@ -26,15 +26,16 @@ authenticator = stauth.Authenticate(
     cookie["expiry_days"],
 )
 
-# --- Login ---
+# --- Login com controle de estado ---
 login_obj = authenticator.login(location="main")
 
-if login_obj is not None:
-    status = login_obj.get("status")
-    nome = login_obj.get("username")
-else:
-    status = None
-    nome = None
+if login_obj:
+    st.session_state["status"] = login_obj.get("status")
+    st.session_state["username"] = login_obj.get("username")
+    st.session_state["name"] = login_obj.get("name")
+
+status = st.session_state.get("status", None)
+nome = st.session_state.get("name", None)
 
 if status is False:
     st.error("Usuário ou senha incorretos.")
@@ -43,6 +44,7 @@ elif status is None:
 else:
     authenticator.logout("Sair", location="sidebar")
     st.sidebar.success(f"Bem-vindo(a), {nome}! 👋")
+
 
 
     # ===============================
