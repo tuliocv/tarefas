@@ -6,9 +6,9 @@ from datetime import datetime
 from models.tarefa import Tarefa
 from services.google_sheets_service import GoogleSheetsService
 
-import streamlit_authenticator as stauth
-st.sidebar.caption(f"🔐 streamlit-authenticator versão: {stauth.__version__}")
-
+# exibe versão se disponível
+versao = getattr(stauth, "__version__", "versão não disponível")
+st.sidebar.caption(f"🔐 streamlit-authenticator {versao}")
 
 # ===============================
 # ⚙️ CONFIGURAÇÕES INICIAIS
@@ -20,7 +20,7 @@ credentials = st.secrets["credentials"]
 cookie = st.secrets["cookie"]
 
 authenticator = stauth.Authenticate(
-    dict(credentials),  # 🔄 converte o objeto Secrets em dict normal
+    dict(credentials),
     cookie["name"],
     cookie["key"],
     cookie["expiry_days"],
