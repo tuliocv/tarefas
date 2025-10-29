@@ -1,32 +1,29 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 import bcrypt
+from datetime import datetime
 
 from models.tarefa import Tarefa
 from services.google_sheets_service import GoogleSheetsService
 
-# ==========================================================
+# ============================================================
 # ⚙️ CONFIGURAÇÕES INICIAIS
-# ==========================================================
+# ============================================================
 st.set_page_config(page_title="Controle de Tarefas", page_icon="✅", layout="wide")
+st.title("🗂️ Controle de Tarefas")
 
-st.sidebar.caption("🔐 Login seguro com bcrypt")
-
-# ==========================================================
-# 🔐 AUTENTICAÇÃO MANUAL (substitui streamlit-authenticator)
-# ==========================================================
+# ============================================================
+# 🔐 AUTENTICAÇÃO MANUAL (usando bcrypt)
+# ============================================================
 creds = st.secrets["credentials"]["usernames"]
 cookie = st.secrets["cookie"]
 
-# --- Inicializa sessão ---
 if "user" not in st.session_state:
     st.session_state["user"] = None
 
-# --- Login manual ---
+# --- Tela de login ---
 if st.session_state["user"] is None:
-    st.title("🔐 Login")
-
+    st.subheader("🔐 Login")
     username_input = st.text_input("Usuário")
     password_input = st.text_input("Senha", type="password")
     login_button = st.button("Entrar")
@@ -36,23 +33,25 @@ if st.session_state["user"] is None:
             stored_pw = creds[username_input]["password"].encode("utf-8")
             if bcrypt.checkpw(password_input.encode("utf-8"), stored_pw):
                 st.session_state["user"] = creds[username_input]["name"]
-                st.experimental_rerun()
+                st.success("Login realizado com sucesso! ✅")
+                st.rerun()
             else:
                 st.error("❌ Senha incorreta.")
         else:
             st.error("❌ Usuário não encontrado.")
     st.stop()
 
-# --- Se logado ---
+# --- Sessão logada ---
 nome = st.session_state["user"]
 st.sidebar.success(f"Bem-vindo(a), {nome}! 👋")
+
 if st.sidebar.button("Sair"):
     st.session_state["user"] = None
-    st.experimental_rerun()
+    st.rerun()
 
-# ==========================================================
-# 🔗 CONEXÃO COM GOOGLE SHEETS
-# ==========================================================
+# ============================================================
+# 🔗 CONEXÃO COM O GOOGLE SHEETS
+# ============================================================
 @st.cache_resource
 def get_service():
     sheet_id = st.secrets["sheets"]["sheet_name"]
@@ -60,26 +59,24 @@ def get_service():
 
 sheets_service = get_service()
 
-# ==========================================================
+# ============================================================
 # 🧠 FUNÇÕES AUXILIARES
-# ==========================================================
+# ============================================================
 def cor_status(status):
     if status == "Concluída":
-        return "#90EE90"  # Verde claro
+        return "#90EE90"  # verde-claro
     elif status == "Em andamento":
-        return "#FFFACD"  # Amarelo claro
-    return "#F08080"  # Vermelho claro
+        return "#FFFACD"  # amarelo-claro
+    return "#F08080"      # vermelho-claro
 
-# ==========================================================
+# ============================================================
 # 🎨 INTERFACE PRINCIPAL
-# ==========================================================
-st.title(f"🗂️ Controle de Tarefas – {nome}")
+# ============================================================
+aba = st.sidebar.radio("📍 Navegação", ["Nova Tarefa", "Minhas Tarefas", "Atualizar Status"])
 
-aba = st.sidebar.radio("Navegação", ["Nova Tarefa", "Minhas Tarefas", "Atualizar Status"])
-
-# ==========================================================
+# ------------------------------------------------------------
 # ➕ NOVA TAREFA
-# ==========================================================
+# ------------------------------------------------------------
 if aba == "Nova Tarefa":
     st.subheader("➕ Adicionar nova tarefa")
     titulo = st.text_input("Título da tarefa")
@@ -93,11 +90,11 @@ if aba == "Nova Tarefa":
             sheets_service.sheet.append_row(nova_linha)
             st.success(f"Tarefa criada com sucesso ✅ (ID: {tarefa.id})")
         else:
-            st.warning("Preencha o título antes de salvar.")
+            st.warning("⚠️ Preencha o título antes de salvar.")
 
-# ==========================================================
+# ------------------------------------------------------------
 # 📋 MINHAS TAREFAS
-# ==========================================================
+# ------------------------------------------------------------
 elif aba == "Minhas Tarefas":
     st.subheader("📋 Suas tarefas")
     df = sheets_service.carregar_tarefas()
@@ -105,7 +102,6 @@ elif aba == "Minhas Tarefas":
     if df.empty:
         st.info("Nenhuma tarefa cadastrada ainda.")
     else:
-        # Filtra apenas tarefas do usuário
         if "autor" in df.columns:
             df = df[df["autor"] == nome]
 
@@ -120,7 +116,6 @@ elif aba == "Minhas Tarefas":
         if filtro_status:
             df = df[df["status"].isin(filtro_status)]
 
-        # Exibição visual das tarefas
         for _, row in df.iterrows():
             cor = cor_status(row["status"])
             st.markdown(
@@ -137,9 +132,9 @@ elif aba == "Minhas Tarefas":
                 unsafe_allow_html=True
             )
 
-# ==========================================================
+# ------------------------------------------------------------
 # 🔄 ATUALIZAR STATUS
-# ==========================================================
+# ------------------------------------------------------------
 elif aba == "Atualizar Status":
     st.subheader("🔄 Atualizar status da tarefa")
     tarefa_id = st.text_input("ID da tarefa")
@@ -151,6 +146,6 @@ elif aba == "Atualizar Status":
             if ok:
                 st.success("Status atualizado com sucesso ✅")
             else:
-                st.error("Tarefa não encontrada.")
+                st.error("❌ Tarefa não encontrada.")
         else:
-            st.warning("Informe o ID da tarefa.")
+            st.warning("⚠️ Informe o ID da tarefa.")
