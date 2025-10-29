@@ -4,13 +4,18 @@ import pandas as pd
 import streamlit as st
 
 class GoogleSheetsService:
-    def __init__(self, sheet_name):
+    def __init__(self, sheet_identifier):
         secrets = st.secrets["gcp_service_account"]
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
         creds = Credentials.from_service_account_info(dict(secrets), scopes=scopes)
         self.gc = gspread.authorize(creds)
-        self.sheet = self.gc.open(sheet_name).sheet1
-
+        try:
+            # tenta abrir por ID
+            self.sheet = self.gc.open_by_key(sheet_identifier).sheet1
+        except Exception as e:
+            st.error(f"Erro ao abrir a planilha com ID/nome {sheet_identifier}: {e}")
+            st.stop()
+            
     def carregar_tarefas(self):
         """Retorna todas as tarefas como DataFrame."""
         dados = self.sheet.get_all_records()
