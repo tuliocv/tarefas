@@ -1,31 +1,17 @@
+# models/tarefa.py
 from datetime import datetime
+import uuid
 
 class Tarefa:
-    def __init__(self, titulo, categoria, prazo, status="Pendente", id=None, historico=None):
-        self.id = id or f"T-{int(datetime.now().timestamp())}"
-        self.data_criacao = datetime.now().strftime("%d/%m/%Y %H:%M")
+    """Representa uma tarefa individual."""
+    def __init__(self, titulo, categoria, prazo):
+        self.id = str(uuid.uuid4())[:8]
         self.titulo = titulo
         self.categoria = categoria
         self.prazo = prazo
-        self.status = status
-        self.historico = historico or f"{self.data_criacao} - Criada"
-        self.ultima_atualizacao = self.data_criacao
-
-    def atualizar_status(self, novo_status):
-        """Atualiza o status e registra histórico."""
-        self.status = novo_status
-        self.ultima_atualizacao = datetime.now().strftime("%d/%m/%Y %H:%M")
-        self.historico += f"\n{self.ultima_atualizacao} - Status alterado para {novo_status}"
+        self.status = "Pendente"
+        self.data_criacao = datetime.now().strftime("%d/%m/%Y")
 
     def to_list(self):
-        """Converte a tarefa para lista (usada no append_row)."""
-        return [
-            self.id,
-            self.data_criacao,
-            self.titulo,
-            self.categoria,
-            self.prazo,
-            self.status,
-            self.historico,
-            self.ultima_atualizacao,
-        ]
+        """Retorna os dados da tarefa em lista para salvar no Google Sheets."""
+        return [self.id, self.titulo, self.categoria, self.prazo, self.status, self.data_criacao]
