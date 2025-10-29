@@ -26,24 +26,23 @@ authenticator = stauth.Authenticate(
     cookie["expiry_days"],
 )
 
-# --- Login com controle de estado ---
-login_obj = authenticator.login(location="main")
+# --- Novo fluxo de autenticação (compatível com 0.4.2) ---
+try:
+    authenticator.login(location="main")
+    status = authenticator.check_authentication()
+except Exception as e:
+    st.error(f"Erro de autenticação: {e}")
+    st.stop()
 
-if login_obj:
-    st.session_state["status"] = login_obj.get("status")
-    st.session_state["username"] = login_obj.get("username")
-    st.session_state["name"] = login_obj.get("name")
-
-status = st.session_state.get("status", None)
-nome = st.session_state.get("name", None)
-
-if status is False:
-    st.error("Usuário ou senha incorretos.")
-elif status is None:
-    st.warning("Por favor, faça login para continuar.")
-else:
+if status:
+    nome = authenticator.get_user()["name"]
     authenticator.logout("Sair", location="sidebar")
     st.sidebar.success(f"Bem-vindo(a), {nome}! 👋")
+
+else:
+    st.warning("Por favor, faça login para continuar.")
+    st.stop()
+
 
 
 
