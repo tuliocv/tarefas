@@ -1,5 +1,12 @@
-streamlit
-gspread
-google-auth
-pandas
-streamlit-authenticator
+# Núcleo do app
+streamlit==1.38.0
+pandas==2.2.3
+
+# Google Sheets
+gspread==6.1.4
+google-auth==2.35.0
+
+# Autenticação
+streamlit-authenticator==0.3.3
+bcrypt==4.2.0
+PyYAML==6.0.2
