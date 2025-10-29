@@ -1,9 +1,24 @@
+# =====================================================
+# ✅ Requisitos compatíveis com Python 3.13 + Streamlit Cloud
+# =====================================================
+
+# --- App principal ---
 streamlit==1.38.0
 pandas==2.2.3
+
+# --- Google Sheets ---
 gspread==6.1.4
 google-auth==2.35.0
-streamlit-authenticator==0.4.2
+
+# --- Autenticação (bcrypt manual) ---
 bcrypt==4.2.0
 PyYAML==6.0.2
+
+# --- Visualização e dashboards ---
 plotly==5.24.1
-st-aggrid==1.0.5
+
+# --- Ajuste do rich e markdown (versão estável para 1.38.0) ---
+rich==13.9.4
+markdown-it-py==4.0.0
+mdurl==0.1.2
+pygments==2.19.2
