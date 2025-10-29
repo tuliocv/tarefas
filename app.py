@@ -17,7 +17,7 @@ credentials = st.secrets["credentials"]
 cookie = st.secrets["cookie"]
 
 authenticator = stauth.Authenticate(
-    credentials,
+    dict(credentials),  # 🔄 converte o objeto Secrets em dict normal
     cookie["name"],
     cookie["key"],
     cookie["expiry_days"],
