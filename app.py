@@ -6,6 +6,9 @@ from datetime import datetime
 from models.tarefa import Tarefa
 from services.google_sheets_service import GoogleSheetsService
 
+import streamlit_authenticator as stauth
+st.sidebar.caption(f"🔐 streamlit-authenticator versão: {stauth.__version__}")
+
 
 # ===============================
 # ⚙️ CONFIGURAÇÕES INICIAIS
@@ -24,14 +27,14 @@ authenticator = stauth.Authenticate(
 )
 
 # --- Login ---
-nome, status, username = authenticator.login("Login", "main")
+nome, status, username = authenticator.login(location="main")
 
 if status is False:
     st.error("Usuário ou senha incorretos.")
 elif status is None:
     st.warning("Por favor, faça login para continuar.")
 else:
-    authenticator.logout("Sair", "sidebar")
+    authenticator.logout("Sair", location="sidebar")
     st.sidebar.success(f"Bem-vindo(a), {nome}! 👋")
 
     # ===============================
