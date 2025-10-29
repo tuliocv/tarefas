@@ -6,14 +6,14 @@ from datetime import datetime
 from models.tarefa import Tarefa
 from services.google_sheets_service import GoogleSheetsService
 
-# exibe versão se disponível
-versao = getattr(stauth, "__version__", "versão não disponível")
-st.sidebar.caption(f"🔐 streamlit-authenticator {versao}")
-
 # ===============================
 # ⚙️ CONFIGURAÇÕES INICIAIS
 # ===============================
 st.set_page_config(page_title="Controle de Tarefas", page_icon="✅", layout="wide")
+
+# exibe versão se disponível
+versao = getattr(stauth, "__version__", "versão não disponível")
+st.sidebar.caption(f"🔐 streamlit-authenticator {versao}")
 
 # --- Autenticação via secrets ---
 credentials = st.secrets["credentials"]
