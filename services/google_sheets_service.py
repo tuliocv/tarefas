@@ -1,40 +1,50 @@
+# services/google_sheets_service.py
 import gspread
-from google.oauth2.service_account import Credentials
 import pandas as pd
-import streamlit as st
+from google.oauth2.service_account import Credentials
 
 class GoogleSheetsService:
-    def __init__(self, sheet_identifier):
-        secrets = st.secrets["gcp_service_account"]
+    def __init__(self, sheet_name: str):
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_info(dict(secrets), scopes=scopes)
-        self.gc = gspread.authorize(creds)
+        credentials = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], scopes=scopes
+        )
+        client = gspread.authorize(credentials)
+        self.sheet = client.open_by_key(sheet_name).sheet1
+
+    def carregar_tarefas(self) -> pd.DataFrame:
+        """Carrega as tarefas do Google Sheets e garante cabeçalhos válidos"""
         try:
-            # tenta abrir por ID
-            self.sheet = self.gc.open_by_key(sheet_identifier).sheet1
+            data = self.sheet.get_all_records()
+            df = pd.DataFrame(data)
+
+            # Garante que todas as colunas necessárias existam
+            required_cols = ["id", "titulo", "categoria", "prazo", "status", "data_criacao", "autor", "descricao"]
+            for col in required_cols:
+                if col not in df.columns:
+                    df[col] = ""
+
+            # Remove linhas completamente vazias
+            df = df.dropna(how="all")
+
+            return df
         except Exception as e:
-            st.error(f"Erro ao abrir a planilha com ID/nome {sheet_identifier}: {e}")
-            st.stop()
-            
-    def carregar_tarefas(self):
-        """Retorna todas as tarefas como DataFrame."""
-        dados = self.sheet.get_all_records()
-        return pd.DataFrame(dados)
+            print(f"Erro ao carregar tarefas: {e}")
+            return pd.DataFrame(columns=["id", "titulo", "categoria", "prazo", "status", "data_criacao", "autor", "descricao"])
 
-    def salvar_tarefa(self, tarefa):
-        """Adiciona nova tarefa."""
-        self.sheet.append_row(tarefa.to_list())
+    def atualizar_status(self, tarefa_id: str, novo_status: str) -> bool:
+        """Atualiza o status de uma tarefa no Google Sheets"""
+        try:
+            valores = self.sheet.get_all_values()
+            headers = valores[0]
+            id_idx = headers.index("id")
+            status_idx = headers.index("status")
 
-    def atualizar_status(self, tarefa_id, novo_status):
-        """Atualiza status e histórico de uma tarefa existente."""
-        dados = self.sheet.get_all_records()
-        for i, row in enumerate(dados, start=2):
-            if row["id"] == tarefa_id:
-                from datetime import datetime
-                hist_antigo = row["historico"]
-                novo_hist = f"{hist_antigo}\n{datetime.now().strftime('%d/%m/%Y %H:%M')} - Status alterado para {novo_status}"
-                self.sheet.update(f"F{i}:H{i}", [
-                    [novo_status, novo_hist, datetime.now().strftime("%d/%m/%Y %H:%M")]
-                ])
-                return True
-        return False
+            for i, linha in enumerate(valores[1:], start=2):
+                if len(linha) > id_idx and linha[id_idx] == tarefa_id:
+                    self.sheet.update_cell(i, status_idx + 1, novo_status)
+                    return True
+            return False
+        except Exception as e:
+            print(f"Erro ao atualizar status: {e}")
+            return False
