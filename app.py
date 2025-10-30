@@ -191,15 +191,16 @@ elif aba == "Analytics":
     InterfaceUI.header("📊 Dashboard de Tarefas")
     df = sheets_service.carregar_tarefas()
     df = ensure_column(df, "autor", "")
-
     if df.empty:
         st.info("Nenhum dado disponível ainda.")
     else:
         df = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
         dashboard = Dashboard(df)
         dashboard.kpi_cards()
-        dashboard.grafico_status()
+        dashboard.tempo_medio_conclusao()
+        dashboard.grafico_evolucao()
         dashboard.grafico_categoria()
+        dashboard.grafico_status()
 
 
 # ------------------------------------------------------------
