@@ -1,4 +1,3 @@
-# models/tarefa.py
 from datetime import datetime
 import uuid
 
