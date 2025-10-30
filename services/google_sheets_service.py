@@ -15,24 +15,41 @@ class GoogleSheetsService:
         self.sheet = client.open_by_key(sheet_name).sheet1
 
     def carregar_tarefas(self) -> pd.DataFrame:
-        """Lê os registros da planilha, com colunas garantidas"""
-        try:
-            data = self.sheet.get_all_records()
-            df = pd.DataFrame(data)
-        except Exception as e:
-            print(f"Erro ao carregar planilha: {e}")
+    """Lê os registros da planilha, padroniza colunas e retorna DataFrame"""
+    try:
+        data = self.sheet.get_all_records()
+        if not data:
             return pd.DataFrame()
+        df = pd.DataFrame(data)
+    except Exception as e:
+        st.error(f"Erro ao carregar planilha: {e}")
+        return pd.DataFrame()
 
-        required_cols = [
-            "id", "titulo", "categoria", "prazo", "status",
-            "data_criacao", "autor", "descricao"
-        ]
-        for col in required_cols:
-            if col not in df.columns:
-                df[col] = ""
+    # Padroniza nomes das colunas
+    df.columns = [col.strip().lower() for col in df.columns]
 
-        df = df.dropna(how="all")
-        return df
+    # Cria colunas obrigatórias se não existirem
+    required_cols = [
+        "id", "titulo", "categoria", "prazo", "status",
+        "data_criacao", "autor", "descricao"
+    ]
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = ""
+
+    # Remove linhas completamente vazias
+    df = df.dropna(how="all")
+
+    # Ordena por data de criação (mais recentes primeiro)
+    if "data_criacao" in df.columns:
+        try:
+            df["data_criacao"] = pd.to_datetime(df["data_criacao"], errors="coerce")
+            df = df.sort_values("data_criacao", ascending=False)
+        except Exception:
+            pass
+
+    return df.reset_index(drop=True)
+
 
     def atualizar_status(self, tarefa_id: str, novo_status: str) -> bool:
         """Atualiza o status da tarefa pelo ID"""
