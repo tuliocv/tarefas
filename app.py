@@ -228,7 +228,16 @@ elif aba == "Atualizar Tarefa":
     nova_categoria = st.selectbox("Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"],
                                   index=["Pessoal","Trabalho","Estudo","Outro"].index(tarefa["categoria"])
                                   if tarefa["categoria"] in ["Pessoal","Trabalho","Estudo","Outro"] else 0)
-    novo_prazo = st.date_input("Prazo", value=pd.to_datetime(tarefa["prazo"], dayfirst=True))
+    # 🔧 Conversão robusta de data
+    try:
+        prazo_value = pd.to_datetime(tarefa["prazo"], dayfirst=True, errors="coerce")
+        if pd.isna(prazo_value):
+            prazo_value = datetime.today()
+    except Exception:
+        prazo_value = datetime.today()
+
+    novo_prazo = st.date_input("Prazo", value=prazo_value)
+
     novo_status = st.selectbox("Status", ["Pendente", "Em andamento", "Concluída"],
                                index=["Pendente", "Em andamento", "Concluída"].index(tarefa["status"])
                                if tarefa["status"] in ["Pendente", "Em andamento", "Concluída"] else 0)
