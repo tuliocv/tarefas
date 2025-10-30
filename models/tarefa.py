@@ -3,15 +3,14 @@ from datetime import datetime
 import uuid
 
 class Tarefa:
-    """Representa uma tarefa individual."""
-    def __init__(self, titulo, categoria, prazo):
+    def __init__(self, titulo: str, categoria: str, prazo_str: str):
         self.id = str(uuid.uuid4())[:8]
+        self.data_criacao = datetime.now().strftime("%d/%m/%Y %H:%M")
         self.titulo = titulo
         self.categoria = categoria
-        self.prazo = prazo
+        self.prazo = prazo_str
         self.status = "Pendente"
-        self.data_criacao = datetime.now().strftime("%d/%m/%Y")
 
     def to_list(self):
-        """Retorna os dados da tarefa em lista para salvar no Google Sheets."""
-        return [self.id, self.titulo, self.categoria, self.prazo, self.status, self.data_criacao]
+        # id | data_criacao | titulo | categoria | prazo | status
+        return [self.id, self.data_criacao, self.titulo, self.categoria, self.prazo, self.status]
