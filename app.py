@@ -302,8 +302,8 @@ elif aba == "Atualizar Tarefa":
 # ------------------------------------------------------------
 # 💡 INSIGHTS IA (opcional, robusto a ausência do módulo)
 # ------------------------------------------------------------
-elif aba == "💡 Insights IA":
-    InterfaceUI.header("💡 Análises e Recomendações Inteligentes")
+elif aba == "Insights IA":
+    InterfaceUI.header("Análises e Recomendações Inteligentes")
     df = sheets_service.carregar_tarefas()
     df = ensure_column(df, "autor", "")
     df = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
