@@ -1,7 +1,9 @@
 # services/google_sheets_service.py
+import streamlit as st
 import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
+
 
 class GoogleSheetsService:
     def __init__(self, sheet_name: str):
