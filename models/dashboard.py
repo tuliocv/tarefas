@@ -1,4 +1,3 @@
-# models/dashboard.py
 import streamlit as st
 import plotly.express as px
 import pandas as pd
@@ -20,10 +19,10 @@ class Dashboard:
         andamento = (self.df["status"] == "Em andamento").sum()
         pendentes = (self.df["status"] == "Pendente").sum()
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("✅ Concluídas", concluidas, f"{(concluidas/total*100):.1f}%" if total else "0%")
-        col2.metric("⏳ Em andamento", andamento)
-        col3.metric("🕒 Pendentes", pendentes)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("✅ Concluídas", concluidas, f"{(concluidas/total*100):.1f}%" if total else "0%")
+        c2.metric("⏳ Em andamento", andamento)
+        c3.metric("🕒 Pendentes", pendentes)
 
     def tempo_medio_conclusao(self):
         df = self.df.copy()
