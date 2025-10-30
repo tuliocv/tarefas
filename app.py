@@ -1,5 +1,5 @@
 # ============================================================
-# ✅ Controle de Tarefas – versão compatível (sem AgGrid)
+# ✅ Controle de Tarefas – compatível com estrutura real da planilha
 # ============================================================
 
 import streamlit as st
@@ -71,7 +71,7 @@ sheet = sheets_service.sheet
 @st.cache_data(ttl=60)
 def get_headers():
     try:
-        return sheet.row_values(1)
+        return [h.strip().lower() for h in sheet.row_values(1)]
     except Exception:
         return []
 
@@ -84,7 +84,7 @@ def id_to_row_map():
     values = sheet.get_all_values()
     if not values:
         return {}
-    headers = values[0]
+    headers = [h.strip().lower() for h in values[0]]
     try:
         id_idx = headers.index("id")
     except ValueError:
@@ -103,18 +103,16 @@ def update_row_fields(row_num: int, updates: dict):
         if k in headers:
             col_idx = headers.index(k) + 1
             sheet.update_cell(row_num, col_idx, v if v is not None else "")
+    # Atualiza timestamp
+    if "ultima_atualizacao" in headers:
+        col_idx = headers.index("ultima_atualizacao") + 1
+        sheet.update_cell(row_num, col_idx, datetime.now().strftime("%d/%m/%Y %H:%M"))
     return True
 
-def append_row_with_optional_description(tarefa: Tarefa, autor: str, descricao: str):
-    headers = get_headers()
-    nova_linha = tarefa.to_list() + [autor]
+def append_row_with_optional_history(tarefa: Tarefa, autor: str, historico: str):
+    """Adiciona nova linha na planilha com histórico e autor"""
+    nova_linha = tarefa.to_list() + [historico, "", autor]  # histórico + ultima_atualização + autor
     sheet.append_row(nova_linha)
-    if "descricao" in headers and descricao:
-        row_map = id_to_row_map()
-        row_num = row_map.get(tarefa.id)
-        if row_num:
-            col_idx = headers.index("descricao") + 1
-            sheet.update_cell(row_num, col_idx, descricao)
 
 def cor_status(status):
     if status == "Concluída": return "#90EE90"
@@ -135,12 +133,12 @@ if aba == "Nova Tarefa":
     titulo = st.text_input("Título da tarefa")
     categoria = st.selectbox("Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"])
     prazo = st.date_input("Prazo")
-    descricao = st.text_area("Descrição (opcional)", height=160, placeholder="Detalhe sua tarefa aqui...")
+    historico = st.text_area("Histórico (opcional)", height=160, placeholder="Adicione observações, contexto ou progresso...")
 
     if st.button("Salvar tarefa"):
         if titulo:
             tarefa = Tarefa(titulo, categoria, prazo.strftime("%d/%m/%Y"))
-            append_row_with_optional_description(tarefa, nome, descricao)
+            append_row_with_optional_history(tarefa, nome, historico)
             st.success(f"Tarefa criada com sucesso ✅ (ID: {tarefa.id})")
         else:
             st.warning("⚠️ Preencha o título antes de salvar.")
@@ -153,12 +151,12 @@ elif aba == "Minhas Tarefas":
     InterfaceUI.header("📋 Suas Tarefas")
     df = sheets_service.carregar_tarefas()
     df = ensure_column(df, "autor", "")
-    df = ensure_column(df, "descricao", "")
+    df = ensure_column(df, "historico", "")
 
     if df.empty:
         st.info("Nenhuma tarefa cadastrada ainda.")
     else:
-        df = df[df["autor"] == nome]
+        df = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
 
         col1, col2 = st.columns(2)
         with col1:
@@ -182,8 +180,8 @@ elif aba == "Minhas Tarefas":
                 data_criacao=row.get("data_criacao", ""),
                 cor=cor
             )
-            if str(row.get("descricao", "")).strip():
-                st.markdown(f"<div style='margin-top:-6px; margin-bottom:16px;'><i>{row['descricao']}</i></div>", unsafe_allow_html=True)
+            if str(row.get("historico", "")).strip():
+                st.markdown(f"<div style='margin-top:-6px; margin-bottom:16px;'><i>{row['historico']}</i></div>", unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------
@@ -197,7 +195,7 @@ elif aba == "Analytics":
     if df.empty:
         st.info("Nenhum dado disponível ainda.")
     else:
-        df = df[df["autor"] == nome]
+        df = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
         dashboard = Dashboard(df)
         dashboard.kpi_cards()
         dashboard.grafico_status()
@@ -211,26 +209,30 @@ elif aba == "Atualizar Tarefa":
     InterfaceUI.header("✍️ Atualizar Tarefas")
     df = sheets_service.carregar_tarefas()
     df = ensure_column(df, "autor", "")
-    df = ensure_column(df, "descricao", "")
+    df = ensure_column(df, "historico", "")
 
-    if df.empty or "autor" not in df.columns:
+    if df.empty:
         st.info("Nenhuma tarefa cadastrada ainda.")
         st.stop()
 
-    df_user = df[df["autor"] == nome]
+    df_user = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
     if df_user.empty:
         st.info("Você ainda não possui tarefas.")
         st.stop()
 
-    st.dataframe(df_user[["id", "titulo", "categoria", "prazo", "status", "descricao"]], use_container_width=True)
+    st.dataframe(df_user[["id", "titulo", "categoria", "prazo", "status", "historico"]], use_container_width=True)
     tarefa_id = st.selectbox("Selecione a tarefa a editar:", df_user["id"].tolist())
 
     tarefa = df_user[df_user["id"] == tarefa_id].iloc[0]
     novo_titulo = st.text_input("Título", value=tarefa["titulo"])
-    nova_categoria = st.selectbox("Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"], index=["Pessoal","Trabalho","Estudo","Outro"].index(tarefa["categoria"]) if tarefa["categoria"] in ["Pessoal","Trabalho","Estudo","Outro"] else 0)
+    nova_categoria = st.selectbox("Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"],
+                                  index=["Pessoal","Trabalho","Estudo","Outro"].index(tarefa["categoria"])
+                                  if tarefa["categoria"] in ["Pessoal","Trabalho","Estudo","Outro"] else 0)
     novo_prazo = st.date_input("Prazo", value=pd.to_datetime(tarefa["prazo"], dayfirst=True))
-    novo_status = st.selectbox("Status", ["Pendente", "Em andamento", "Concluída"], index=["Pendente", "Em andamento", "Concluída"].index(tarefa["status"]) if tarefa["status"] in ["Pendente", "Em andamento", "Concluída"] else 0)
-    nova_desc = st.text_area("Descrição", value=tarefa.get("descricao", ""), height=150)
+    novo_status = st.selectbox("Status", ["Pendente", "Em andamento", "Concluída"],
+                               index=["Pendente", "Em andamento", "Concluída"].index(tarefa["status"])
+                               if tarefa["status"] in ["Pendente", "Em andamento", "Concluída"] else 0)
+    novo_hist = st.text_area("Histórico", value=tarefa.get("historico", ""), height=150)
 
     if st.button("💾 Salvar alterações"):
         try:
@@ -239,7 +241,7 @@ elif aba == "Atualizar Tarefa":
                 "categoria": nova_categoria,
                 "prazo": novo_prazo.strftime("%d/%m/%Y"),
                 "status": novo_status,
-                "descricao": nova_desc
+                "historico": novo_hist
             }
             row_map = id_to_row_map()
             row_num = row_map.get(tarefa_id)
