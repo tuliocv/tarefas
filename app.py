@@ -149,7 +149,7 @@ def cor_status(status):
 # ============================================================
 aba = st.sidebar.radio(
     "📍 Navegação",
-    ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar Tarefa", "🧩 Kanban"]
+    ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar Tarefa", "Kanban"]
 )
 
 # ------------------------------------------------------------
@@ -343,7 +343,7 @@ elif aba == "Atualizar Tarefa":
 # ------------------------------------------------------------
 # 🧩 KANBAN (estático)
 # ------------------------------------------------------------
-elif aba == "🧩 Kanban":
+elif aba == "Kanban":
     InterfaceUI.section_title("🧩 Kanban – Visualização de Status")
     df = sheets_service.carregar_tarefas()
     for c in ["autor", "status", "titulo", "prazo", "categoria"]:
