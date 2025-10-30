@@ -6,20 +6,71 @@ class InterfaceUI:
         st.markdown(
             """
             <style>
-            :root{
-              --bg:#0f172a; --card:#111827; --muted:#9ca3af; --accent:#22c55e;
-              --chip:#1f2937; --chipb:#374151;
+            :root {
+              --bg:#f8fafc;
+              --card:#ffffff;
+              --muted:#64748b;
+              --accent:#10b981;
+              --accent-light:#d1fae5;
+              --border:#e2e8f0;
+              --shadow:0 2px 6px rgba(0,0,0,0.05);
             }
-            .main { background: linear-gradient(180deg, #0b1220 0%, #0f172a 100%); color:#e5e7eb;}
-            .stButton>button { border-radius:10px; height:42px; }
+
+            .main {
+              background-color: var(--bg);
+              color:#0f172a;
+              font-family: 'Inter', sans-serif;
+            }
+
+            /* Botões */
+            .stButton>button {
+              border-radius:8px;
+              height:40px;
+              background-color:var(--accent);
+              color:white;
+              border:none;
+              font-weight:600;
+              transition: all 0.2s ease;
+            }
+            .stButton>button:hover {
+              background-color:#059669;
+              transform: translateY(-1px);
+            }
+
+            /* Cards */
             .card {
-              background: linear-gradient(180deg, #0b1220 0%, #111827 100%);
-              border: 1px solid #1f2937; border-radius:14px; padding:16px; margin-bottom:12px;
+              background-color: var(--card);
+              border: 1px solid var(--border);
+              border-radius:12px;
+              padding:16px;
+              margin-bottom:14px;
+              box-shadow: var(--shadow);
+              transition: box-shadow 0.2s ease;
             }
-            .chip { display:inline-block; background:var(--chip); border:1px solid var(--chipb);
-                    padding:4px 10px; border-radius:999px; color:#cbd5e1; margin-right:6px; font-size:12px;}
-            h1,h2,h3,h4 { color:#e5e7eb; }
-            .muted { color:#9ca3af; }
+            .card:hover {
+              box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            }
+
+            /* Chips */
+            .chip {
+              display:inline-block;
+              background: var(--accent-light);
+              color:#065f46;
+              font-weight:500;
+              padding:3px 10px;
+              border-radius:999px;
+              font-size:12px;
+              border:1px solid #a7f3d0;
+            }
+
+            /* Textos */
+            h1,h2,h3,h4 {
+              color:#0f172a;
+              font-family: 'Inter', sans-serif;
+              font-weight:700;
+            }
+            .muted { color: var(--muted); }
+            hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
             </style>
             """,
             unsafe_allow_html=True
@@ -31,7 +82,7 @@ class InterfaceUI:
 
     @staticmethod
     def header(texto: str):
-        st.markdown(f"<h2 style='margin:0.2rem 0 0.6rem 0'>{texto}</h2>", unsafe_allow_html=True)
+        st.markdown(f"<h2 style='margin:0.4rem 0 0.8rem 0'>{texto}</h2>", unsafe_allow_html=True)
 
     @staticmethod
     def section(texto: str):
@@ -39,7 +90,7 @@ class InterfaceUI:
 
     @staticmethod
     def hr():
-        st.markdown("<hr style='border-color:#1f2937;'>", unsafe_allow_html=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
 
     @staticmethod
     def chip(texto: str):
@@ -75,8 +126,8 @@ class InterfaceUI:
                 <b>Prazo:</b> {prazo or '-'} &nbsp;•&nbsp;
                 <b>Autor:</b> {autor}
               </div>
-              <div style="font-size:12px;color:#94a3b8;"><i>Criado em {data_criacao}</i></div>
-              {"<div style='margin-top:10px; color:#cbd5e1;'><i>"+historico+"</i></div>" if historico else ""}
+              <div style="font-size:12px;color:#64748b;"><i>Criado em {data_criacao}</i></div>
+              {"<div style='margin-top:10px; color:#334155;'><i>"+historico+"</i></div>" if historico else ""}
             </div>
             """,
             unsafe_allow_html=True
