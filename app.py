@@ -110,8 +110,12 @@ def update_row_fields(row_num: int, updates: dict):
     return True
 
 def append_row_with_optional_history(tarefa: Tarefa, autor: str, historico: str):
-    """Adiciona nova linha na planilha com histórico e autor"""
-    nova_linha = tarefa.to_list() + [historico, "", autor]  # histórico + ultima_atualização + autor
+    """Adiciona nova linha na planilha com histórico e autor
+       Ordem da planilha:
+       id | data_criacao | titulo | categoria | prazo | status | historico | ultima_atualizacao | autor
+    """
+    # tarefa.to_list() deve retornar: [id, data_criacao, titulo, categoria, prazo, status]
+    nova_linha = tarefa.to_list() + [historico, "", autor]  # historico + ultima_atualizacao + autor
     sheet.append_row(nova_linha)
 
 def cor_status(status):
@@ -123,7 +127,10 @@ def cor_status(status):
 # ============================================================
 # 🎨 INTERFACE PRINCIPAL
 # ============================================================
-aba = st.sidebar.radio("📍 Navegação", ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar Tarefa"])
+aba = st.sidebar.radio(
+    "📍 Navegação",
+    ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar Tarefa", "💡 Insights IA"]
+)
 
 # ------------------------------------------------------------
 # ➕ NOVA TAREFA
@@ -133,13 +140,18 @@ if aba == "Nova Tarefa":
     titulo = st.text_input("Título da tarefa")
     categoria = st.selectbox("Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"])
     prazo = st.date_input("Prazo")
-    historico = st.text_area("Histórico (opcional)", height=160, placeholder="Adicione observações, contexto ou progresso...")
+    historico = st.text_area(
+        "Histórico (opcional)",
+        height=160,
+        placeholder="Adicione observações, contexto ou progresso..."
+    )
 
     if st.button("Salvar tarefa"):
         if titulo:
             tarefa = Tarefa(titulo, categoria, prazo.strftime("%d/%m/%Y"))
             append_row_with_optional_history(tarefa, nome, historico)
             st.success(f"Tarefa criada com sucesso ✅ (ID: {tarefa.id})")
+            st.toast("Tarefa salva no Google Sheets! 🟢")
         else:
             st.warning("⚠️ Preencha o título antes de salvar.")
 
@@ -181,7 +193,10 @@ elif aba == "Minhas Tarefas":
                 cor=cor
             )
             if str(row.get("historico", "")).strip():
-                st.markdown(f"<div style='margin-top:-6px; margin-bottom:16px;'><i>{row['historico']}</i></div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='margin-top:-6px; margin-bottom:16px;'><i>{row['historico']}</i></div>",
+                    unsafe_allow_html=True
+                )
 
 
 # ------------------------------------------------------------
@@ -202,6 +217,15 @@ elif aba == "Analytics":
         dashboard.grafico_categoria()
         dashboard.grafico_status()
 
+        # Exportação rápida
+        st.download_button(
+            "📥 Baixar CSV",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name="minhas_tarefas.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
 
 # ------------------------------------------------------------
 # ✍️ ATUALIZAR TAREFA
@@ -221,14 +245,21 @@ elif aba == "Atualizar Tarefa":
         st.info("Você ainda não possui tarefas.")
         st.stop()
 
-    st.dataframe(df_user[["id", "titulo", "categoria", "prazo", "status", "historico"]], use_container_width=True)
+    st.dataframe(
+        df_user[["id", "titulo", "categoria", "prazo", "status", "historico"]],
+        use_container_width=True
+    )
     tarefa_id = st.selectbox("Selecione a tarefa a editar:", df_user["id"].tolist())
 
     tarefa = df_user[df_user["id"] == tarefa_id].iloc[0]
     novo_titulo = st.text_input("Título", value=tarefa["titulo"])
-    nova_categoria = st.selectbox("Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"],
-                                  index=["Pessoal","Trabalho","Estudo","Outro"].index(tarefa["categoria"])
-                                  if tarefa["categoria"] in ["Pessoal","Trabalho","Estudo","Outro"] else 0)
+    nova_categoria = st.selectbox(
+        "Categoria",
+        ["Pessoal", "Trabalho", "Estudo", "Outro"],
+        index=["Pessoal", "Trabalho", "Estudo", "Outro"].index(tarefa["categoria"])
+        if tarefa["categoria"] in ["Pessoal", "Trabalho", "Estudo", "Outro"] else 0
+    )
+
     # 🔧 Conversão robusta de data
     try:
         prazo_value = pd.to_datetime(tarefa["prazo"], dayfirst=True, errors="coerce")
@@ -236,12 +267,14 @@ elif aba == "Atualizar Tarefa":
             prazo_value = datetime.today()
     except Exception:
         prazo_value = datetime.today()
-
     novo_prazo = st.date_input("Prazo", value=prazo_value)
 
-    novo_status = st.selectbox("Status", ["Pendente", "Em andamento", "Concluída"],
-                               index=["Pendente", "Em andamento", "Concluída"].index(tarefa["status"])
-                               if tarefa["status"] in ["Pendente", "Em andamento", "Concluída"] else 0)
+    novo_status = st.selectbox(
+        "Status",
+        ["Pendente", "Em andamento", "Concluída"],
+        index=["Pendente", "Em andamento", "Concluída"].index(tarefa["status"])
+        if tarefa["status"] in ["Pendente", "Em andamento", "Concluída"] else 0
+    )
     novo_hist = st.text_area("Histórico", value=tarefa.get("historico", ""), height=150)
 
     if st.button("💾 Salvar alterações"):
@@ -258,8 +291,33 @@ elif aba == "Atualizar Tarefa":
             if row_num:
                 update_row_fields(row_num, updates)
                 st.success("✅ Tarefa atualizada com sucesso!")
+                st.toast("Linha atualizada no Google Sheets! 🟢")
                 st.rerun()
             else:
                 st.error("Tarefa não encontrada na planilha.")
         except Exception as e:
             st.error(f"Erro ao atualizar tarefa: {e}")
+
+
+# ------------------------------------------------------------
+# 💡 INSIGHTS IA (opcional, robusto a ausência do módulo)
+# ------------------------------------------------------------
+elif aba == "💡 Insights IA":
+    InterfaceUI.header("💡 Análises e Recomendações Inteligentes")
+    df = sheets_service.carregar_tarefas()
+    df = ensure_column(df, "autor", "")
+    df = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
+
+    try:
+        from models.ai_insights import AIInsights
+        insights = AIInsights(df)
+        insights.sentimento_historico()
+        insights.recomendacoes()
+    except Exception as e:
+        st.info(
+            "Para habilitar esta aba, adicione `models/ai_insights.py` e "
+            "`textblob==0.17.1` ao requirements.txt. "
+            "Enquanto isso, os demais módulos seguem funcionando normalmente. 😉"
+        )
+        with st.expander("Detalhes técnicos (opcional)"):
+            st.code(str(e))
