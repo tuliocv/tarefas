@@ -1,16 +1,15 @@
 # ============================================================
-# ✅ Controle de Tarefas – Filtros, Tema V2, IA Preditiva e Kanban (estático)
+# ✅ Controle de Tarefas – com Logs automáticos
 # ============================================================
 
 import streamlit as st
 import pandas as pd
 import bcrypt
-from datetime import datetime, date
+from datetime import datetime
 
 from models.tarefa import Tarefa
 from models.dashboard import Dashboard
-from models.interface_ui import InterfaceUI   # <-- Tema V2
-from models.ai_insights import AIInsights     # <-- IA com risco de atraso
+from models.interface_ui import InterfaceUI
 from services.google_sheets_service import GoogleSheetsService
 
 
@@ -18,7 +17,7 @@ from services.google_sheets_service import GoogleSheetsService
 # ⚙️ CONFIGURAÇÕES INICIAIS
 # ============================================================
 st.set_page_config(page_title="Controle de Tarefas", page_icon="✅", layout="wide")
-InterfaceUI.page_header("🗂️ Controle de Tarefas")  # cabeçalho bonito
+st.markdown("<h1 style='text-align:center;'>🗂️ Controle de Tarefas</h1>", unsafe_allow_html=True)
 
 
 # ============================================================
@@ -29,10 +28,12 @@ if "user" not in st.session_state:
     st.session_state["user"] = None
 
 if st.session_state["user"] is None:
-    InterfaceUI.section_title("🔐 Login de Usuário")
+    InterfaceUI.header("🔐 Login de Usuário")
     username_input = st.text_input("Usuário")
     password_input = st.text_input("Senha", type="password")
-    if st.button("Entrar"):
+    login_button = st.button("Entrar")
+
+    if login_button:
         if username_input in creds:
             stored_pw = creds[username_input]["password"].encode("utf-8")
             if bcrypt.checkpw(password_input.encode("utf-8"), stored_pw):
@@ -46,11 +47,10 @@ if st.session_state["user"] is None:
     st.stop()
 
 nome = st.session_state["user"]
-with st.sidebar:
-    st.success(f"Bem-vindo(a), {nome}! 👋")
-    if st.button("Sair"):
-        st.session_state["user"] = None
-        st.rerun()
+st.sidebar.success(f"Bem-vindo(a), {nome}! 👋")
+if st.sidebar.button("Sair"):
+    st.session_state["user"] = None
+    st.rerun()
 
 
 # ============================================================
@@ -91,52 +91,66 @@ def id_to_row_map():
         return {}
     mapping = {}
     for i, row in enumerate(values[1:], start=2):
-        if len(row) > id_idx:
+        if len(row) > id_idx and row[id_idx]:
             mapping[row[id_idx]] = i
     return mapping
 
-def update_row_fields(row_num: int, updates: dict):
+def update_row_fields(row_num: int, updates: dict, usuario: str = "Sistema"):
+    """Atualiza campos, carimba 'ultima_atualizacao' e registra logs por campo alterado."""
     headers = get_headers()
     if not headers or not row_num:
         return False
+
+    # Lê valores antigos
+    valores_antigos = sheet.row_values(row_num)
+    # padding pra evitar IndexError em planilhas irregulares
+    if len(valores_antigos) < len(headers):
+        valores_antigos += [""] * (len(headers) - len(valores_antigos))
+    antigo_dict = dict(zip(headers, valores_antigos))
+
+    # Aplica atualizações + logging por campo
     for k, v in updates.items():
-        if k in headers:
-            col_idx = headers.index(k) + 1
-            sheet.update_cell(row_num, col_idx, v if v is not None else "")
-    # Atualiza timestamp
+        kl = k.strip().lower()
+        if kl in headers:
+            col_idx = headers.index(kl) + 1
+            antigo = antigo_dict.get(kl, "")
+            novo = "" if v is None else str(v)
+            if str(antigo) != novo:
+                sheet.update_cell(row_num, col_idx, novo)
+                sheets_service.registrar_log(
+                    usuario=usuario,
+                    id_tarefa=antigo_dict.get("id", "N/A"),
+                    campo=kl,
+                    valor_antigo=antigo,
+                    valor_novo=novo
+                )
+
+    # Atualiza timestamp + log
     if "ultima_atualizacao" in headers:
         col_idx = headers.index("ultima_atualizacao") + 1
-        sheet.update_cell(row_num, col_idx, datetime.now().strftime("%d/%m/%Y %H:%M"))
+        agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+        sheet.update_cell(row_num, col_idx, agora)
+        sheets_service.registrar_log(
+            usuario=usuario,
+            id_tarefa=antigo_dict.get("id", "N/A"),
+            campo="ultima_atualizacao",
+            valor_antigo=antigo_dict.get("ultima_atualizacao", ""),
+            valor_novo=agora
+        )
     return True
 
 def append_row_with_optional_history(tarefa: Tarefa, autor: str, historico: str):
-    """Adiciona nova linha na planilha conforme colunas reais:
-    id, data_criacao, titulo, categoria, prazo, status, historico, ultima_atualizacao, autor
     """
-    now = datetime.now().strftime("%d/%m/%Y %H:%M")
-    linha = [
-        tarefa.id, tarefa.data_criacao, tarefa.titulo, tarefa.categoria,
-        tarefa.prazo, tarefa.status,
-        historico or "",
-        "",              # ultima_atualizacao (vazia na criação)
-        autor
-    ]
-    sheet.append_row(linha)
-
-def parse_prazo_safe(x):
+    Adiciona nova linha respeitando a estrutura:
+    id | data_criacao | titulo | categoria | prazo | status | historico | ultima_atualizacao | autor
+    """
+    nova_linha = tarefa.to_list() + [historico or "", "", autor]
+    sheet.append_row(nova_linha)
+    # Registra log de criação
     try:
-        d = pd.to_datetime(x, dayfirst=True, errors="coerce")
-        return d
+        sheets_service.registrar_log(autor, tarefa.id, "criação", "", f"Tarefa '{tarefa.titulo}' criada")
     except Exception:
-        return pd.NaT
-
-def is_overdue(prazo_str, status_str):
-    d = parse_prazo_safe(prazo_str)
-    if pd.isna(d):
-        return False
-    if str(status_str).strip().lower() == "concluída":
-        return False
-    return d.date() < date.today()
+        pass
 
 def cor_status(status):
     if status == "Concluída": return "#90EE90"
@@ -149,23 +163,20 @@ def cor_status(status):
 # ============================================================
 aba = st.sidebar.radio(
     "📍 Navegação",
-    ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar Tarefa", "Kanban"]
+    ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar Tarefa", "Logs"]
 )
 
 # ------------------------------------------------------------
 # ➕ NOVA TAREFA
 # ------------------------------------------------------------
 if aba == "Nova Tarefa":
-    InterfaceUI.section_title("➕ Adicionar Nova Tarefa")
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        titulo = st.text_input("Título da tarefa")
-    with col_b:
-        categoria = st.selectbox("Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"])
+    InterfaceUI.header("➕ Adicionar Nova Tarefa")
+    titulo = st.text_input("Título da tarefa")
+    categoria = st.selectbox("Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"])
     prazo = st.date_input("Prazo")
-    historico = st.text_area("Histórico (opcional)", height=140, placeholder="Adicione observações, contexto ou progresso...")
+    historico = st.text_area("Histórico (opcional)", height=160, placeholder="Adicione observações, contexto ou progresso...")
 
-    if st.button("Salvar tarefa", type="primary", use_container_width=True):
+    if st.button("Salvar tarefa"):
         if titulo:
             tarefa = Tarefa(titulo, categoria, prazo.strftime("%d/%m/%Y"))
             append_row_with_optional_history(tarefa, nome, historico)
@@ -175,151 +186,110 @@ if aba == "Nova Tarefa":
 
 
 # ------------------------------------------------------------
-# 📋 MINHAS TAREFAS (com busca/ordenação/atrasadas)
+# 📋 MINHAS TAREFAS
 # ------------------------------------------------------------
 elif aba == "Minhas Tarefas":
-    InterfaceUI.section_title("📋 Suas Tarefas")
+    InterfaceUI.header("📋 Suas Tarefas")
     df = sheets_service.carregar_tarefas()
-    for c in ["autor", "historico", "status", "categoria", "prazo", "titulo", "data_criacao"]:
-        df = ensure_column(df, c, "")
+    df = ensure_column(df, "autor", "")
+    df = ensure_column(df, "historico", "")
 
     if df.empty:
         st.info("Nenhuma tarefa cadastrada ainda.")
     else:
-        # Filtros avançados
-        df = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
+        df = df[df["autor"].astype(str).str.strip().str.lower() == nome.strip().lower()]
 
-        with st.container():
-            col1, col2, col3, col4 = st.columns([2, 1.5, 1, 0.8])
-            with col1:
-                q = st.text_input("🔎 Buscar (título/histórico/categoria/status)").strip().lower()
-            with col2:
-                ordenar_por = st.selectbox("Ordenar por", ["Prazo (mais próximo)", "Data de criação (mais recente)", "Título (A→Z)"])
-            with col3:
-                only_overdue = st.checkbox("Somente atrasadas", value=False)
-            with col4:
-                if st.button("🔁 Recarregar"):
-                    st.cache_data.clear()
-                    st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            filtro_categoria = st.multiselect("Filtrar por categoria", sorted(df["categoria"].dropna().unique().tolist()))
+        with col2:
+            filtro_status = st.multiselect("Filtrar por status", sorted(df["status"].dropna().unique().tolist()))
 
-        if q:
-            df = df[
-                df["titulo"].str.lower().str.contains(q, na=False) |
-                df["historico"].str.lower().str.contains(q, na=False) |
-                df["categoria"].str.lower().str.contains(q, na=False) |
-                df["status"].str.lower().str.contains(q, na=False)
-            ]
+        if filtro_categoria:
+            df = df[df["categoria"].isin(filtro_categoria)]
+        if filtro_status:
+            df = df[df["status"].isin(filtro_status)]
 
-        if only_overdue:
-            df = df[df.apply(lambda r: is_overdue(r["prazo"], r["status"]), axis=1)]
-
-        # Ordenação
-        if ordenar_por == "Prazo (mais próximo)":
-            df["_prazo_dt"] = df["prazo"].apply(parse_prazo_safe)
-            df = df.sort_values(by="_prazo_dt", ascending=True, na_position="last").drop(columns=["_prazo_dt"])
-        elif ordenar_por == "Data de criação (mais recente)":
-            df["_criacao_dt"] = pd.to_datetime(df["data_criacao"], errors="coerce", dayfirst=True)
-            df = df.sort_values(by="_criacao_dt", ascending=False, na_position="last").drop(columns=["_criacao_dt"])
-        else:
-            df = df.sort_values(by="titulo", ascending=True, na_position="last")
-
-        # Cards
-        if df.empty:
-            st.info("Nada a exibir com esses filtros.")
-        else:
-            for _, row in df.iterrows():
-                atrasada = is_overdue(row.get("prazo", ""), row.get("status", ""))
-                badge = "🔥 Atrasada" if atrasada else ("✅ Concluída" if row.get("status") == "Concluída" else "⏳ Em andamento" if row.get("status") == "Em andamento" else "📝 Pendente")
-                InterfaceUI.styled_card(
-                    titulo=row.get("titulo", ""),
-                    categoria=row.get("categoria", ""),
-                    status=f"{row.get('status','')}  ·  {badge}",
-                    prazo=row.get("prazo", ""),
-                    autor=row.get("autor", nome),
-                    data_criacao=row.get("data_criacao", ""),
-                    cor=cor_status(row.get("status", "")),
-                    highlight=atrasada
+        for _, row in df.iterrows():
+            cor = cor_status(row.get("status", "Pendente"))
+            InterfaceUI.styled_card(
+                titulo=row.get("titulo", ""),
+                categoria=row.get("categoria", ""),
+                status=row.get("status", ""),
+                prazo=row.get("prazo", ""),
+                autor=row.get("autor", nome),
+                data_criacao=row.get("data_criacao", ""),
+                cor=cor
+            )
+            if str(row.get("historico", "")).strip():
+                st.markdown(
+                    f"<div style='margin-top:-6px; margin-bottom:16px;'><i>{row['historico']}</i></div>",
+                    unsafe_allow_html=True
                 )
-                if str(row.get("historico", "")).strip():
-                    st.markdown(f"<div style='margin-top:-8px; margin-bottom:18px;'><i>{row['historico']}</i></div>", unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------
-# 📊 ANALYTICS (inclui IA preditiva)
+# 📊 ANALYTICS
 # ------------------------------------------------------------
 elif aba == "Analytics":
-    InterfaceUI.section_title("📊 Dashboard de Tarefas")
+    InterfaceUI.header("📊 Dashboard de Tarefas")
     df = sheets_service.carregar_tarefas()
-    for c in ["autor", "status", "data_criacao", "ultima_atualizacao", "historico", "categoria", "prazo"]:
-        df = ensure_column(df, c, "")
-
+    df = ensure_column(df, "autor", "")
     if df.empty:
         st.info("Nenhum dado disponível ainda.")
     else:
-        df_user = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
-
-        # KPI + Gráficos
-        dashboard = Dashboard(df_user)
+        df = df[df["autor"].astype(str).str.strip().str.lower() == nome.strip().lower()]
+        dashboard = Dashboard(df)
         dashboard.kpi_cards()
         dashboard.tempo_medio_conclusao()
         dashboard.grafico_evolucao()
         dashboard.grafico_categoria()
         dashboard.grafico_status()
 
-        # IA – Sentimento + Risco de Atraso
-        st.divider()
-        InterfaceUI.section_title("🤖 IA – Insights")
-        ai = AIInsights(df_user)
-        ai.sentimento_historico()
-        ai.risco_atraso()  # <- nova função: previsão simples de risco
-
 
 # ------------------------------------------------------------
 # ✍️ ATUALIZAR TAREFA
 # ------------------------------------------------------------
 elif aba == "Atualizar Tarefa":
-    InterfaceUI.section_title("✍️ Atualizar Tarefas")
+    InterfaceUI.header("✍️ Atualizar Tarefas")
     df = sheets_service.carregar_tarefas()
-    for c in ["autor", "historico"]:
-        df = ensure_column(df, c, "")
+    df = ensure_column(df, "autor", "")
+    df = ensure_column(df, "historico", "")
 
     if df.empty:
         st.info("Nenhuma tarefa cadastrada ainda.")
         st.stop()
 
-    df_user = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
+    df_user = df[df["autor"].astype(str).str.strip().str.lower() == nome.strip().lower()]
     if df_user.empty:
         st.info("Você ainda não possui tarefas.")
         st.stop()
 
-    st.dataframe(
-        df_user[["id", "titulo", "categoria", "prazo", "status", "historico"]],
-        use_container_width=True
-    )
+    st.dataframe(df_user[["id", "titulo", "categoria", "prazo", "status", "historico"]], use_container_width=True)
     tarefa_id = st.selectbox("Selecione a tarefa a editar:", df_user["id"].tolist())
 
     tarefa = df_user[df_user["id"] == tarefa_id].iloc[0]
     novo_titulo = st.text_input("Título", value=tarefa["titulo"])
-    nova_categoria = st.selectbox(
-        "Categoria", ["Pessoal", "Trabalho", "Estudo", "Outro"],
-        index=["Pessoal","Trabalho","Estudo","Outro"].index(tarefa["categoria"])
-        if tarefa["categoria"] in ["Pessoal","Trabalho","Estudo","Outro"] else 0
-    )
+    categorias_padrao = ["Pessoal", "Trabalho", "Estudo", "Outro"]
+    idx_cat = categorias_padrao.index(tarefa["categoria"]) if tarefa["categoria"] in categorias_padrao else 0
+    nova_categoria = st.selectbox("Categoria", categorias_padrao, index=idx_cat)
 
-    # Prazo seguro
-    prazo_value = parse_prazo_safe(tarefa["prazo"])
-    if pd.isna(prazo_value):
+    # Conversão robusta de data
+    try:
+        prazo_value = pd.to_datetime(tarefa["prazo"], dayfirst=True, errors="coerce")
+        if pd.isna(prazo_value):
+            prazo_value = datetime.today()
+    except Exception:
         prazo_value = datetime.today()
     novo_prazo = st.date_input("Prazo", value=prazo_value)
 
-    novo_status = st.selectbox(
-        "Status", ["Pendente", "Em andamento", "Concluída"],
-        index=["Pendente", "Em andamento", "Concluída"].index(tarefa["status"])
-        if tarefa["status"] in ["Pendente", "Em andamento", "Concluída"] else 0
-    )
+    status_padrao = ["Pendente", "Em andamento", "Concluída"]
+    idx_status = status_padrao.index(tarefa["status"]) if tarefa["status"] in status_padrao else 0
+    novo_status = st.selectbox("Status", status_padrao, index=idx_status)
+
     novo_hist = st.text_area("Histórico", value=tarefa.get("historico", ""), height=150)
 
-    if st.button("💾 Salvar alterações", type="primary"):
+    if st.button("💾 Salvar alterações"):
         try:
             updates = {
                 "titulo": novo_titulo,
@@ -331,7 +301,7 @@ elif aba == "Atualizar Tarefa":
             row_map = id_to_row_map()
             row_num = row_map.get(tarefa_id)
             if row_num:
-                update_row_fields(row_num, updates)
+                update_row_fields(row_num, updates, usuario=nome)
                 st.success("✅ Tarefa atualizada com sucesso!")
                 st.rerun()
             else:
@@ -341,36 +311,29 @@ elif aba == "Atualizar Tarefa":
 
 
 # ------------------------------------------------------------
-# 🧩 KANBAN (estático)
+# 📜 LOGS
 # ------------------------------------------------------------
-elif aba == "Kanban":
-    InterfaceUI.section_title("🧩 Kanban – Visualização de Status")
-    df = sheets_service.carregar_tarefas()
-    for c in ["autor", "status", "titulo", "prazo", "categoria"]:
-        df = ensure_column(df, c, "")
+elif aba == "Logs":
+    InterfaceUI.header("📜 Histórico de Alterações")
+    try:
+        log_sheet = sheet.spreadsheet.worksheet("Logs")
+        data = log_sheet.get_all_records()
+        if not data:
+            st.info("Nenhum log registrado ainda.")
+        else:
+            df_logs = pd.DataFrame(data)
+            # Filtro por usuário e por tarefa (opcionais)
+            col1, col2 = st.columns(2)
+            with col1:
+                filtro_usuario = st.selectbox("Filtrar por usuário", ["(todos)"] + sorted(df_logs["usuario"].unique()), index=0)
+            with col2:
+                filtro_tarefa = st.text_input("Filtrar por ID da tarefa", "")
 
-    if df.empty:
-        st.info("Nenhuma tarefa cadastrada ainda.")
-        st.stop()
+            if filtro_usuario != "(todos)":
+                df_logs = df_logs[df_logs["usuario"] == filtro_usuario]
+            if filtro_tarefa.strip():
+                df_logs = df_logs[df_logs["id_tarefa"].astype(str).str.contains(filtro_tarefa.strip(), case=False)]
 
-    df_user = df[df["autor"].str.strip().str.lower() == nome.strip().lower()]
-    cols = st.columns(3)
-    buckets = {
-        "Pendente": df_user[df_user["status"] == "Pendente"],
-        "Em andamento": df_user[df_user["status"] == "Em andamento"],
-        "Concluída": df_user[df_user["status"] == "Concluída"],
-    }
-    for col, (status_lbl, dfi) in zip(cols, buckets.items()):
-        with col:
-            InterfaceUI.pill_title(status_lbl)
-            if dfi.empty:
-                InterfaceUI.empty_card("Sem tarefas")
-            else:
-                for _, row in dfi.iterrows():
-                    atrasada = is_overdue(row.get("prazo",""), row.get("status",""))
-                    badge = "🔥 Atrasada" if atrasada else "🟢 OK"
-                    InterfaceUI.small_task_card(
-                        titulo=row.get("titulo",""),
-                        extra=f"{row.get('categoria','')} · {row.get('prazo','')} · {badge}",
-                        highlight=atrasada
-                    )
+            st.dataframe(df_logs.sort_values("data_hora", ascending=False), use_container_width=True)
+    except Exception:
+        st.warning("A aba 'Logs' ainda não existe. Ela será criada automaticamente na primeira atualização de tarefa.")
