@@ -129,7 +129,7 @@ def cor_status(status):
 # ============================================================
 aba = st.sidebar.radio(
     "📍 Navegação",
-    ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar Tarefa", "💡 Insights IA"]
+    ["Nova Tarefa", "Minhas Tarefas", "Analytics", "Atualizar Tarefa", "Insights IA"]
 )
 
 # ------------------------------------------------------------
