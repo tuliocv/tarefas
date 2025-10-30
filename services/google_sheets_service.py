@@ -1,12 +1,9 @@
-# ============================================================
-# ✅ Google Sheets Service – Alinhado ao cabeçalho real
-# ============================================================
-
+# services/google_sheets_service.py
 import streamlit as st
 import gspread
 import pandas as pd
+from datetime import datetime
 from google.oauth2.service_account import Credentials
-
 
 class GoogleSheetsService:
     def __init__(self, sheet_name: str):
@@ -16,73 +13,47 @@ class GoogleSheetsService:
             st.secrets["gcp_service_account"], scopes=scopes
         )
         client = gspread.authorize(credentials)
-        self.sheet = client.open_by_key(sheet_name).sheet1
+        self.sheet = client.open_by_key(sheet_name).sheet1  # aba principal (Sheet1)
 
-    # ============================================================
-    # 📥 Carregar tarefas
-    # ============================================================
     def carregar_tarefas(self) -> pd.DataFrame:
-        """Lê a planilha, padroniza colunas e retorna DataFrame"""
+        """Lê registros da planilha"""
         try:
             data = self.sheet.get_all_records()
-            if not data:
-                return pd.DataFrame()
             df = pd.DataFrame(data)
         except Exception as e:
-            st.error(f"Erro ao carregar planilha: {e}")
+            print(f"Erro ao carregar planilha: {e}")
             return pd.DataFrame()
 
-        # Normaliza colunas
-        df.columns = [col.strip().lower() for col in df.columns]
-
-        # Garante colunas esperadas (baseado no seu cabeçalho real)
+        # Garante colunas esperadas (em minúsculo, caso venham maiúsculas)
+        df.columns = [c.strip().lower() for c in df.columns]
         required_cols = [
-            "id", "data_criacao", "titulo", "categoria",
-            "prazo", "status", "historico", "ultima_atualizacao", "autor"
+            "id", "data_criacao", "titulo", "categoria", "prazo",
+            "status", "historico", "ultima_atualizacao", "autor"
         ]
         for col in required_cols:
             if col not in df.columns:
                 df[col] = ""
-
-        # Limpeza básica
         df = df.dropna(how="all")
-        df["autor"] = df["autor"].astype(str).str.strip().str.lower()
-        df["titulo"] = df["titulo"].astype(str).str.strip()
-        df["status"] = df["status"].replace("", "Pendente")
-        df["categoria"] = df["categoria"].replace("", "Outro")
-        df["historico"] = df["historico"].astype(str).fillna("")
+        return df
 
-        # Ordena por data_criacao, se existir
+    # ==============================================
+    # 🔍 Função de registro automático de logs
+    # ==============================================
+    def registrar_log(self, usuario: str, id_tarefa: str, campo: str, valor_antigo: str, valor_novo: str):
+        """Adiciona uma linha de log na aba 'Logs'"""
         try:
-            df["data_criacao"] = pd.to_datetime(df["data_criacao"], errors="coerce")
-            df = df.sort_values("data_criacao", ascending=False)
+            log_sheet = self.sheet.spreadsheet.worksheet("Logs")
         except Exception:
-            pass
+            # cria a aba e cabeçalho, se não existir
+            log_sheet = self.sheet.spreadsheet.add_worksheet(title="Logs", rows="100", cols="10")
+            log_sheet.append_row(["data_hora", "usuario", "id_tarefa", "campo", "valor_antigo", "valor_novo"])
 
-        return df.reset_index(drop=True)
-
-    # ============================================================
-    # 🔄 Atualizar status
-    # ============================================================
-    def atualizar_status(self, tarefa_id: str, novo_status: str) -> bool:
-        """Atualiza o status da tarefa pelo ID"""
-        try:
-            valores = self.sheet.get_all_values()
-            headers = [h.strip().lower() for h in valores[0]]
-
-            if "id" not in headers or "status" not in headers:
-                st.error("Planilha sem colunas esperadas: 'id' e 'status'.")
-                return False
-
-            id_idx = headers.index("id")
-            status_idx = headers.index("status")
-
-            for i, linha in enumerate(valores[1:], start=2):
-                if len(linha) > id_idx and linha[id_idx] == tarefa_id:
-                    self.sheet.update_cell(i, status_idx + 1, novo_status)
-                    self.sheet.update_cell(i, headers.index("ultima_atualizacao") + 1, pd.Timestamp.now().strftime("%d/%m/%Y %H:%M"))
-                    return True
-            return False
-        except Exception as e:
-            st.error(f"Erro ao atualizar status: {e}")
-            return False
+        log_entry = [
+            datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            usuario,
+            id_tarefa,
+            campo,
+            valor_antigo or "",
+            valor_novo or ""
+        ]
+        log_sheet.append_row(log_entry)
