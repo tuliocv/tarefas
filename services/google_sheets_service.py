@@ -1,4 +1,7 @@
-# services/google_sheets_service.py
+# ============================================================
+# ✅ Serviço Google Sheets – versão robusta e compatível
+# ============================================================
+
 import streamlit as st
 import gspread
 import pandas as pd
@@ -14,48 +17,62 @@ class GoogleSheetsService:
         client = gspread.authorize(credentials)
         self.sheet = client.open_by_key(sheet_name).sheet1
 
+    # ============================================================
+    # 📥 Carregar tarefas
+    # ============================================================
     def carregar_tarefas(self) -> pd.DataFrame:
-    """Lê os registros da planilha, padroniza colunas e retorna DataFrame"""
-    try:
-        data = self.sheet.get_all_records()
-        if not data:
-            return pd.DataFrame()
-        df = pd.DataFrame(data)
-    except Exception as e:
-        st.error(f"Erro ao carregar planilha: {e}")
-        return pd.DataFrame()
-
-    # Padroniza nomes das colunas
-    df.columns = [col.strip().lower() for col in df.columns]
-
-    # Cria colunas obrigatórias se não existirem
-    required_cols = [
-        "id", "titulo", "categoria", "prazo", "status",
-        "data_criacao", "autor", "descricao"
-    ]
-    for col in required_cols:
-        if col not in df.columns:
-            df[col] = ""
-
-    # Remove linhas completamente vazias
-    df = df.dropna(how="all")
-
-    # Ordena por data de criação (mais recentes primeiro)
-    if "data_criacao" in df.columns:
+        """Lê a planilha, padroniza colunas e retorna DataFrame"""
         try:
-            df["data_criacao"] = pd.to_datetime(df["data_criacao"], errors="coerce")
-            df = df.sort_values("data_criacao", ascending=False)
-        except Exception:
-            pass
+            data = self.sheet.get_all_records()
+            if not data:
+                return pd.DataFrame()
+            df = pd.DataFrame(data)
+        except Exception as e:
+            st.error(f"Erro ao carregar planilha: {e}")
+            return pd.DataFrame()
 
-    return df.reset_index(drop=True)
+        # --- Normaliza nomes de colunas ---
+        df.columns = [col.strip().lower() for col in df.columns]
 
+        # --- Garante colunas esperadas ---
+        required_cols = [
+            "id", "titulo", "categoria", "prazo", "status",
+            "data_criacao", "autor", "descricao"
+        ]
+        for col in required_cols:
+            if col not in df.columns:
+                df[col] = ""
 
+        # --- Remove linhas totalmente vazias ---
+        df = df.dropna(how="all")
+
+        # --- Normaliza campos ---
+        df["autor"] = df["autor"].astype(str).str.strip()
+        df["titulo"] = df["titulo"].astype(str).str.strip()
+        df["status"] = df["status"].replace("", "Pendente")
+
+        # --- Ordena por data_criacao (se possível) ---
+        if "data_criacao" in df.columns:
+            try:
+                df["data_criacao"] = pd.to_datetime(df["data_criacao"], errors="coerce")
+                df = df.sort_values("data_criacao", ascending=False)
+            except Exception:
+                pass
+
+        return df.reset_index(drop=True)
+
+    # ============================================================
+    # 🔄 Atualizar status
+    # ============================================================
     def atualizar_status(self, tarefa_id: str, novo_status: str) -> bool:
         """Atualiza o status da tarefa pelo ID"""
         try:
             valores = self.sheet.get_all_values()
-            headers = valores[0]
+            headers = [h.strip().lower() for h in valores[0]]
+            if "id" not in headers or "status" not in headers:
+                st.error("A planilha não contém colunas esperadas: 'id' e 'status'.")
+                return False
+
             id_idx = headers.index("id")
             status_idx = headers.index("status")
 
@@ -65,5 +82,5 @@ class GoogleSheetsService:
                     return True
             return False
         except Exception as e:
-            print(f"Erro ao atualizar status: {e}")
+            st.error(f"Erro ao atualizar status: {e}")
             return False
